@@ -35,6 +35,9 @@ build-backend = "hatchling.build"
 [tool.hatch.version]
 source = "uv-dynamic-versioning"
 
+[tool.hatch.build.targets.sdist]
+only-include = ["src/sdk_creator"]
+
 [tool.uv-dynamic-versioning]
 fallback-version = "0.0.0"
 
@@ -95,4 +98,32 @@ known-third-party = ["pydantic", "httpx", "loguru"]
 convention = "google"
 
 [dependency-groups]
-dev = ["mypy>=1.16.1", "ruff>=0.11.13"]
+dev = [
+    "coverage>=7.9.1",
+    "mypy>=1.16.1",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.0.0",
+    "ruff>=0.11.13",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src/sdk_creator"]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 100
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D", "INP", "TD", "ERA001", "RUF"]

@@ -16,6 +16,7 @@ from .errors import (
     ApiResponseError,
     ApiTimeoutError,
 )
+from .toolkit import join_endpoints
 
 
 class AsyncRestAdapter:
@@ -29,7 +30,6 @@ class AsyncRestAdapter:
         async with AsyncRestAdapter("api.example.com", api_key="key") as client:
             response = await client.get("users/123")
         ```
-
     """
 
     def __init__(
@@ -43,11 +43,12 @@ class AsyncRestAdapter:
         jwt_token: str | None = None,
         azure_api: bool = False,
         headers: dict | None = None,
+        endpoint_prefix: str | None = None,
     ) -> None:
         """Initialize the AsyncRestAdapter.
 
         Args:
-            hostname: API server hostname (e.g., "api.example.com").
+            hostname: API server hostname (e.g., "www.api.example.com")
             api_version: API version path. Defaults to "v1".
             api_key: Optional API key for authentication.
             ssl_verify: Whether to verify SSL certificates. Defaults to True.
@@ -55,10 +56,10 @@ class AsyncRestAdapter:
             jwt_token: Optional JWT token for Bearer authentication.
             azure_api: Add required header with assiociated api key.
             headers: Additional default headers to include with all requests.
+            endpoint_prefix: A shared endpoint prefix to apply to all requests.
 
         Raises:
             ValueError: If hostname or api_version is empty.
-
         """
         if not hostname:
             raise ValueError("hostname cannot be empty")
@@ -68,7 +69,9 @@ class AsyncRestAdapter:
         self.base_url = HttpUrl.build(
             scheme=scheme,
             host=hostname,
-            path=api_version,
+            path=join_endpoints(api_version, endpoint_prefix)
+            if endpoint_prefix
+            else api_version,
         )
         headers = headers or {}
 
@@ -116,10 +119,7 @@ class AsyncRestAdapter:
             ApiRequestError: Network/connection error.
             ApiResponseError: JSON parsing error.
             ApiRaisedFromStatusError: HTTP error status (when graceful=False).
-
         """
-        logger.debug(self._client.base_url)
-
         logs_ph = {
             "pre": lambda method, url: f"{method} {url}",
             "post": lambda request_desc, success, status_code, message: ", ".join(
@@ -198,6 +198,7 @@ class AsyncRestAdapter:
         endpoint: str,
         headers: Mapping | None = None,
         timeout: float | None = None,
+        expect_json_response: bool = True,
         **params: QueryParam,
     ) -> ApiResponse:
         """Send GET request to endpoint.
@@ -206,14 +207,19 @@ class AsyncRestAdapter:
             endpoint: API endpoint path.
             headers: Additional headers.
             timeout: Request timeout.
+            expect_json_response: Parse response as JSON (default: False).
             **params: Query parameters.
 
         Returns:
             ApiResponse with parsed JSON data.
-
         """
         return await self._request(
-            "GET", endpoint, headers=headers, timeout=timeout, params=params
+            "GET",
+            endpoint,
+            headers=headers,
+            timeout=timeout,
+            params=params,
+            expect_json_response=expect_json_response,
         )
 
     async def post(
@@ -222,6 +228,7 @@ class AsyncRestAdapter:
         data: Json = None,
         headers: Mapping | None = None,
         timeout: float | None = None,
+        expect_json_response: bool = True,
         **params: QueryParam,
     ) -> ApiResponse:
         """Send POST request to create/submit data.
@@ -231,14 +238,20 @@ class AsyncRestAdapter:
             data: JSON data for request body.
             headers: Additional headers.
             timeout: Request timeout.
+            expect_json_response: Parse response as JSON (default: True).
             **params: Query parameters.
 
         Returns:
             ApiResponse with parsed JSON data.
-
         """
         return await self._request(
-            "POST", endpoint, data=data, headers=headers, timeout=timeout, params=params
+            "POST",
+            endpoint,
+            data=data,
+            headers=headers,
+            timeout=timeout,
+            params=params,
+            expect_json_response=expect_json_response,
         )
 
     async def put(
@@ -247,6 +260,7 @@ class AsyncRestAdapter:
         data: Json = None,
         headers: Mapping | None = None,
         timeout: float | None = None,
+        expect_json_response: bool = False,
         **params: QueryParam,
     ) -> ApiResponse:
         """Send PUT request to update/replace resource.
@@ -256,14 +270,20 @@ class AsyncRestAdapter:
             data: JSON data for request body.
             headers: Additional headers.
             timeout: Request timeout.
+            expect_json_response: Parse response as JSON (default: False).
             **params: Query parameters.
 
         Returns:
             ApiResponse with parsed JSON data.
-
         """
         return await self._request(
-            "PUT", endpoint, data=data, headers=headers, timeout=timeout, params=params
+            "PUT",
+            endpoint,
+            data=data,
+            headers=headers,
+            timeout=timeout,
+            params=params,
+            expect_json_response=expect_json_response,
         )
 
     async def patch(
@@ -272,6 +292,7 @@ class AsyncRestAdapter:
         data: Json = None,
         headers: Mapping | None = None,
         timeout: float | None = None,
+        expect_json_response: bool = False,
         **params: QueryParam,
     ) -> ApiResponse:
         """Send PATCH request for partial updates.
@@ -281,11 +302,11 @@ class AsyncRestAdapter:
             data: JSON data for request body.
             headers: Additional headers.
             timeout: Request timeout.
+            expect_json_response: Parse response as JSON (default: False).
             **params: Query parameters.
 
         Returns:
             ApiResponse with parsed JSON data.
-
         """
         return await self._request(
             "PATCH",
@@ -294,6 +315,7 @@ class AsyncRestAdapter:
             headers=headers,
             timeout=timeout,
             params=params,
+            expect_json_response=expect_json_response,
         )
 
     async def delete(
@@ -317,7 +339,6 @@ class AsyncRestAdapter:
 
         Returns:
             ApiResponse with text or JSON data.
-
         """
         return await self._request(
             "DELETE",

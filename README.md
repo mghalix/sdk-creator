@@ -1,29 +1,34 @@
 # SDK Creator
 
+[![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen.svg)](https://github.com/mghalix/sdk-creator)
 [![PyPI version](https://badge.fury.io/py/sdk-creator.svg)](https://badge.fury.io/py/sdk-creator)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A foundation for building **strongly-typed Python SDKs** around existing REST
-APIs. SDK Creator provides the async HTTP foundation while you focus on
-building clean, Pydantic-powered API wrappers with comprehensive error handling
-and type safety.
+APIs. SDK Creator provides the async HTTP foundation, comprehensive utilities,
+and production-grade testing while you focus on building clean, Pydantic-powered
+API wrappers with comprehensive error handling and type safety.
 
 ## Why SDK Creator?
 
 Instead of manually handling HTTP requests, JSON parsing, and error handling
 for every API integration, SDK Creator lets you:
 
-- **Build clean SDK interfaces** with strong typing and Pydantic models
-- **Focus on business logic** rather than HTTP boilerplate
-- **Leverage async/await** for high-performance API calls
-- **Handle errors gracefully** with specific exception types
-- **Maintain consistency** across multiple API integrations
+-   **Build clean SDK interfaces** with strong typing and Pydantic models
+-   **Focus on business logic** rather than HTTP boilerplate
+-   **Leverage async/await** for high-performance API calls
+-   **Handle errors gracefully** with comprehensive exception types
+-   **Maintain consistency** across multiple API integrations
+-   **Use battle-tested utilities** for common SDK development tasks
+-   **Benefit from 100% test coverage** and production-ready code quality
 
 ## Installation
 
 ```bash
 pip install sdk-creator
+# or using uv
+uv add sdk-creator
 ```
 
 ## Quick Start - Building Your First SDK
@@ -34,19 +39,21 @@ Here's how to build a clean, typed SDK wrapper around a Users API:
 
 ```python
 # models/responses.py
-from pydantic import BaseModel
+from sdk_creator.toolkit import SdkModel, CamelCaseAliasMixin
 from typing import List, Optional
 
-class User(BaseModel):
-    id: int
-    name: str
-    email: str
-    active: bool
+class User(CamelCaseAliasMixin):
+    """User model with automatic camelCase API field mapping."""
+    user_id: int        # Maps to "userId" in API
+    full_name: str      # Maps to "fullName" in API
+    email_address: str  # Maps to "emailAddress" in API
+    is_active: bool     # Maps to "isActive" in API
 
-class UserList(BaseModel):
+class UserList(SdkModel):
+    """User list response with enhanced SDK model features."""
     users: List[User]
-    total: int
-    page: int
+    total_count: int    # Maps to "totalCount" in API
+    current_page: int   # Maps to "currentPage" in API
 
 class CreateUserResponse(BaseModel):
     user: User
@@ -60,6 +67,7 @@ class CreateUserResponse(BaseModel):
 from typing import Optional, Self, Any
 from sdk_creator import AsyncRestAdapter
 from sdk_creator.errors import ApiRaisedFromStatusError
+from sdk_creator.toolkit import SdkModel, CamelCaseAliasMixin, join_endpoints
 from .models.responses import User, UserList, CreateUserResponse
 
 class UsersSDK:
@@ -73,6 +81,7 @@ class UsersSDK:
         self._adapter = AsyncRestAdapter(
             hostname=base_url,
             api_version="v1",
+            endpoint_prefix="users",  # all endpoints will be prefixed with "users"
             api_key=api_key,
             scheme="https"
         )
@@ -194,11 +203,13 @@ class PersonDirectory:
 ## Key Features for SDK Development
 
 ### 🏗️ **Composition Over Inheritance**
-- Use `AsyncRestAdapter` as a private component in your SDK classes
-- Build clean, domain-specific interfaces on top of HTTP operations
-- Maintain separation between transport logic and business logic
+
+-   Use `AsyncRestAdapter` as a private component in your SDK classes
+-   Build clean, domain-specific interfaces on top of HTTP operations
+-   Maintain separation between transport logic and business logic
 
 ### 🔐 **Flexible Authentication**
+
 Configure authentication once in your SDK constructor:
 
 ```python
@@ -217,10 +228,14 @@ class MySDK:
 ```
 
 ### 🛡️ **Comprehensive Error Handling**
-Transform HTTP errors into meaningful domain exceptions:
+
+Transform HTTP errors into meaningful domain exceptions with a complete error hierarchy:
 
 ```python
-from sdk_creator.errors import ApiRaisedFromStatusError
+from sdk_creator.errors import (
+    ApiRaisedFromStatusError, ApiTimeoutError,
+    ApiRequestError, ApiResponseError
+)
 
 class UserNotFoundError(Exception):
     pass
@@ -234,9 +249,16 @@ class UserSDK:
             if e.status_code == 404:
                 raise UserNotFoundError(f"User {user_id} not found") from e
             raise  # Re-raise other HTTP errors
+        except ApiTimeoutError:
+            raise TimeoutError("User service unavailable")
+        except ApiRequestError as e:
+            raise ConnectionError(f"Network error: {e}")
+        except ApiResponseError as e:
+            raise ValueError(f"Invalid response format: {e}")
 ```
 
 ### 📝 **Strong Typing with Pydantic**
+
 Automatic validation and serialization of API responses:
 
 ```python
@@ -254,9 +276,82 @@ class User(BaseModel):
         allow_population_by_field_name = True
 ```
 
+## 🧰 SDK Development Toolkit
+
+SDK Creator includes a comprehensive toolkit of utilities to accelerate your SDK development:
+
+### URL and Endpoint Utilities
+
+```python
+from sdk_creator.toolkit import url_to_hostname, join_endpoints
+
+# extract hostname from URLs with validation
+hostname = url_to_hostname("https://api.example.com/v1/users")
+# returns: "api.example.com"
+
+# intelligently join URL endpoints
+endpoint = join_endpoints("api", "v1", "users", "123")
+# returns: "api/v1/users/123"
+
+# handles edge cases gracefully
+endpoint = join_endpoints("/api/", "//v1//", "/users/")
+# returns: "api/v1/users"
+```
+
+### Case Conversion Utilities
+
+```python
+from sdk_creator.toolkit import to_camelcase
+
+# convert snake_case to camelCase for API compatibility
+camel_field = to_camelcase("user_id")  # Returns: "userId"
+camel_field = to_camelcase("created_at_timestamp")  # Returns: "createdAtTimestamp"
+```
+
+### Pydantic Model Enhancements
+
+```python
+from sdk_creator.toolkit import CamelCaseAliasMixin, SdkModel
+
+# automatic camelCase field aliases for APIs
+class UserModel(CamelCaseAliasMixin):
+    user_id: int      # API field: "userId"
+    created_at: str   # API field: "createdAt"
+    is_active: bool   # API field: "isActive"
+
+# enhanced base model with SDK-specific configurations
+class ApiResponse(SdkModel):
+    data: dict
+    status: str
+    # inherits from_attributes=True and arbitrary_types_allowed=True
+```
+
+### Exception Handling
+
+```python
+from sdk_creator.errors import (
+    ApiError, ApiRequestError, ApiResponseError,
+    ApiTimeoutError, ApiRaisedFromStatusError
+)
+
+try:
+    response = await sdk.get_user(123)
+except ApiRaisedFromStatusError as e:
+    print(f"HTTP {e.status_code} error: {e}")
+except ApiTimeoutError:
+    print("Request timed out")
+except ApiRequestError:
+    print("Network connection failed")
+except ApiResponseError:
+    print("Invalid response format")
+except ApiError:
+    print("General API error")
+```
+
 ## SDK Development Patterns
 
 ### Environment Configuration
+
 Support multiple environments in your SDK:
 
 ```python
@@ -279,6 +374,7 @@ class MySDK:
 ```
 
 ### Pagination Support
+
 Handle paginated responses cleanly:
 
 ```python
@@ -301,6 +397,7 @@ class MySDK:
 ```
 
 ### Custom Exception Hierarchy
+
 Create meaningful exceptions for your domain:
 
 ```python
@@ -324,24 +421,29 @@ class RateLimitError(MySDKError):
 ## AsyncRestAdapter API Reference
 
 ### Constructor Parameters
-- `hostname` (str): API server hostname
-- `api_version` (str): API version path (default: "v1")
-- `api_key` (str): API key for authentication
-- `ssl_verify` (bool): Verify SSL certificates (default: True)
-- `scheme` (Literal["http", "https"]): URL scheme (default: "https")
-- `jwt_token` (str | None): JWT token for Bearer authentication
-- `azure_api` (bool): Enable Azure API Management headers
-- `headers` (dict | None): Additional default headers
+
+-   `hostname` (str): API server hostname or full endpoint URL
+-   `api_version` (str): API version path (default: "v1")
+-   `endpoint_prefix` (str | None): Additional prefix for all endpoints
+-   `api_key` (str): API key for authentication
+-   `ssl_verify` (bool): Verify SSL certificates (default: True)
+-   `scheme` (Literal["http", "https"]): URL scheme (default: "https")
+-   `jwt_token` (str | None): JWT token for Bearer authentication
+-   `azure_api` (bool): Enable Azure API Management headers
+-   `headers` (dict | None): Additional default headers
 
 ### HTTP Methods
-- `get(endpoint, **params)` - GET request
-- `post(endpoint, data=None, **params)` - POST request
-- `put(endpoint, data=None, **params)` - PUT request
-- `patch(endpoint, data=None, **params)` - PATCH request
-- `delete(endpoint, data=None, **params)` - DELETE request
 
+All HTTP methods support an `expect_json_response` parameter for flexible response handling:
+
+-   `get(endpoint, expect_json_response=True, **params)` - GET request
+-   `post(endpoint, data=None, expect_json_response=True, **params)` - POST request
+-   `put(endpoint, data=None, expect_json_response=False, **params)` - PUT request
+-   `patch(endpoint, data=None, expect_json_response=False, **params)` - PATCH request
+-   `delete(endpoint, data=None, expect_json_response=False, **params)` - DELETE request
 
 ### Exception Hierarchy
+
 ```
 ApiError (base)
 ├── ApiRequestError        # Network/connection issues
@@ -350,9 +452,58 @@ ApiError (base)
 └── ApiRaisedFromStatusError  # HTTP error status codes
 ```
 
+## 🧪 Quality & Testing
+
+SDK Creator is built with production-grade quality standards:
+
+### Test Coverage
+
+-   **100% source code coverage** across all modules
+-   **162 comprehensive tests** covering all functionality
+-   **Continuous integration** with GitHub Actions
+-   **Multi-Python version support** (3.11, 3.12, 3.13)
+
+### Code Quality
+
+-   **Zero linting errors** with Ruff
+-   **Full type annotations** for excellent IDE support
+-   **Professional error handling** with detailed exception hierarchy
+-   **Comprehensive documentation** with practical examples
+
+### Development Tools
+
+-   **Automated coverage reporting** with badge integration
+-   **Pre-commit hooks** for code formatting and linting
+-   **Development scripts** for testing and coverage verification
+-   **CI/CD workflows** for automated quality checks
+
+### Testing Your SDK
+
+SDK Creator provides excellent testing foundations for your own SDKs:
+
+```python
+import pytest
+from unittest.mock import Mock
+from your_sdk import UserSDK
+from sdk_creator.errors import ApiRaisedFromStatusError
+
+@pytest.mark.asyncio
+async def test_user_not_found():
+    sdk = UserSDK("test-key")
+
+    # mock the adapter to return 404
+    mock_response = Mock()
+    mock_response.status_code = 404
+    sdk._adapter._client.request = Mock(side_effect=ApiRaisedFromStatusError(404, "Not Found"))
+
+    with pytest.raises(UserNotFoundError):
+        await sdk.get_user(999)
+```
+
 ## Best Practices
 
 ### 1. **Keep SDKs Focused**
+
 Create separate SDK classes for different API domains:
 
 ```python
@@ -369,6 +520,7 @@ class MegaSDK:
 ```
 
 ### 2. **Use Composition**
+
 Keep `AsyncRestAdapter` as a private implementation detail:
 
 ```python
@@ -383,6 +535,7 @@ class MySDK(AsyncRestAdapter):
 ```
 
 ### 3. **Validate Input Early**
+
 Use Pydantic models for request validation:
 
 ```python
@@ -392,12 +545,13 @@ class CreateUserRequest(BaseModel):
     age: int = Field(..., ge=0, le=150)
 
 async def create_user(self, request: CreateUserRequest) -> User:
-    # Validation happens automatically
+    # validation happens automatically
     response = await self._adapter.post("users", data=request.model_dump())
     return User.model_validate(response.data)
 ```
 
 ### ApiResponse
+
 Response object returned by all HTTP methods:
 
 ```python
@@ -410,6 +564,7 @@ class ApiResponse(BaseModel):
 ```
 
 ## Exception Hierarchy
+
 ```text
 ApiError (base)
 ├── ApiRequestError        # Network/connection issues
@@ -418,19 +573,58 @@ ApiError (base)
 └── ApiRaisedFromStatusError  # HTTP error status codes
 ```
 
+## 🚀 Development & Contributing
+
+### Development Setup
+
+```bash
+# clone and setup development environment
+git clone https://github.com/mghalix/sdk-creator.git
+cd sdk-creator
+
+# install with development dependencies
+uv sync --dev
+
+# run tests with coverage
+python scripts/check_coverage.py
+
+# format and lint code
+python -m ruff format .
+python -m ruff check .
+# or 
+./scripts/lint.sh
+```
+
+### Quality Standards
+
+-   **100% test coverage** maintained
+-   **Zero linting errors** with Ruff
+-   **Full type annotations** required
+-   **Comprehensive tests** for all functionality
+
+### Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Ensure 100% coverage is maintained
+5. Submit a pull request
+
 ## Roadmap
 
-### 🚀 Next Release
-- **Built-in Caching** - Response caching with TTL, Redis/memory backends
-- **Rate Limiting** - Automatic rate limiting with exponential backoff
-- **Enhanced Pagination** - Auto-pagination with generators and cursor support
-- **Test Coverage** - Comprehensive test suite with 100% coverage
+### 🚀 Next Release (v0.0.3)
+
+-   **Built-in Caching** - Response caching with TTL, Redis/memory backends
+-   **Rate Limiting** - Automatic rate limiting with exponential backoff
+-   **Enhanced Pagination** - Auto-pagination with generators and cursor support
 
 ### 🔮 Future Versions
-- **Mock Server** - Built-in testing utilities with mock responses
-- **Circuit Breaker** - Fault tolerance patterns for resilient SDKs
-- **Metrics & Monitoring** - Request/response metrics and health checks
-- **OpenAPI Integration** - Auto-generate SDKs from OpenAPI specs
+
+-   **Mock Server** - Built-in testing utilities with mock responses
+-   **Circuit Breaker** - Fault tolerance patterns for resilient SDKs
+-   **Metrics & Monitoring** - Request/response metrics and health checks
+-   **OpenAPI Integration** - Auto-generate SDKs from OpenAPI specs
 
 ## License
+
 This project is licensed under the MIT License.

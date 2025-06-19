@@ -19,7 +19,6 @@ class ApiResponse(BaseModel):
         status_code: HTTP status code (200, 404, 500, etc.).
         data: Response data parsed from JSON or raw text.
         message: Optional status message or error description.
-
     """
 
     status_code: int
